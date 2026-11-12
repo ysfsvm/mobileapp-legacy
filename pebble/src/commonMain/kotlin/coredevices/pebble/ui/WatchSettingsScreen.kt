@@ -182,6 +182,7 @@ import io.rebble.libpebblecommon.database.entity.HealthGender
 import io.rebble.libpebblecommon.database.entity.QuietTimeSchedule
 import io.rebble.libpebblecommon.js.PKJSApp
 import io.rebble.libpebblecommon.metadata.WatchType
+import io.rebble.libpebblecommon.metadata.supportsHrm
 import io.rebble.libpebblecommon.packets.ProtocolCapsFlag
 import io.rebble.libpebblecommon.permissions.PermissionPolicy
 import io.rebble.libpebblecommon.plugin.PluginMetadata
@@ -636,6 +637,9 @@ fun rememberSettingsItemsState(navBarNav: NavBarNav?, snackbarDisplay: SnackbarD
             )
         }
     }
+    val anyWatchHasHrm = remember(watchesCastable) {
+        watchesCastable.any { it is KnownPebbleDevice && it.color?.supportsHrm() == true }
+    }
     val anyWatchSupportsFiveMinHrm = remember(watchesCastable) {
         watchesCastable.any {
             if (it !is KnownPebbleDevice) return@any false
@@ -677,6 +681,7 @@ fun rememberSettingsItemsState(navBarNav: NavBarNav?, snackbarDisplay: SnackbarD
             rebbleVoiceAvailable,
             platformSttAvailable,
             anyWatchSupportsFiveMinHrm,
+            anyWatchHasHrm,
             healthPlatformAvailable,
         ) {
             listOfNotNull(
@@ -1295,7 +1300,7 @@ fun rememberSettingsItemsState(navBarNav: NavBarNav?, snackbarDisplay: SnackbarD
                     section = Section.Health,
                     group = SettingsGroup.HeartRate,
                     checked = healthSettings.hrmEnabled,
-                    show = { healthSettings.trackingEnabled },
+                    show = { anyWatchHasHrm && healthSettings.trackingEnabled },
                     onCheckChanged = {
                         libPebble.updateHealthSettings(
                             healthSettings.copy(hrmEnabled = it)
@@ -1328,7 +1333,7 @@ fun rememberSettingsItemsState(navBarNav: NavBarNav?, snackbarDisplay: SnackbarD
                             HRMonitoringInterval.Disabled -> "Off"
                         }
                     },
-                    show = { healthSettings.trackingEnabled && healthSettings.hrmEnabled },
+                    show = { anyWatchHasHrm && healthSettings.trackingEnabled && healthSettings.hrmEnabled },
                 ),
                 basicSettingsToggleItem(
                     id = SettingsIds.HrmActivityTracking,
@@ -1338,7 +1343,7 @@ fun rememberSettingsItemsState(navBarNav: NavBarNav?, snackbarDisplay: SnackbarD
                     section = Section.Health,
                     group = SettingsGroup.HeartRate,
                     checked = healthSettings.hrmActivityTrackingEnabled,
-                    show = { healthSettings.trackingEnabled && healthSettings.hrmEnabled },
+                    show = { anyWatchHasHrm && healthSettings.trackingEnabled && healthSettings.hrmEnabled },
                     onCheckChanged = {
                         libPebble.updateHealthSettings(
                             healthSettings.copy(hrmActivityTrackingEnabled = it)

@@ -43,6 +43,10 @@ import io.rebble.libpebblecommon.database.entity.ScheduleWatchPref
 import io.rebble.libpebblecommon.database.entity.WatchPref
 import io.rebble.libpebblecommon.database.entity.WatchPrefEnum
 import io.rebble.libpebblecommon.locker.AppType
+import io.rebble.libpebblecommon.metadata.WatchType
+import io.rebble.libpebblecommon.metadata.hasRgbBacklight
+import io.rebble.libpebblecommon.metadata.hasTouchscreen
+import io.rebble.libpebblecommon.metadata.isColor
 import io.rebble.libpebblecommon.timeline.TimelineColor
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.map
@@ -85,6 +89,26 @@ internal fun List<WatchPreference<*>>.hideUnusedBacklightColorPrefs(autoSunTimes
     }
 }
 
+/** Prefs for hardware the watch doesn't have; all are shown while the watch is unknown. */
+internal fun List<WatchPreference<*>>.hideUnsupportedHardwarePrefs(watchType: WatchType?): List<WatchPreference<*>> {
+    if (watchType == null) return this
+    return filterNot {
+        when (it.pref) {
+            RgbColorWatchPref.BacklightColor,
+            RgbColorWatchPref.BacklightColorNight,
+            BoolWatchPref.BacklightColorDayNightEnabled,
+            NumberWatchPref.BacklightColorSunriseMinute,
+            NumberWatchPref.BacklightColorSunsetMinute -> !watchType.hasRgbBacklight()
+            EnumWatchPref.BacklightTouch,
+            BoolWatchPref.QuietTimeTouchBacklight -> !watchType.hasTouchscreen()
+            BoolWatchPref.AlternativeNotificationStyle -> watchType.isColor()
+            // The firmware only has this setting on the Pebble Time 2.
+            EnumWatchPref.TimelineQuickViewUnsupportedFaces -> watchType != WatchType.EMERY
+            else -> false
+        }
+    }
+}
+
 private val SCHEDULE_HOURS = mapOf<WatchPref<*>, WatchPref<*>>(
     BoolWatchPref.QuietTimeWeekdayScheduleEnabled to ScheduleWatchPref.QuietTimeWeekdaySchedule,
     BoolWatchPref.QuietTimeWeekendScheduleEnabled to ScheduleWatchPref.QuietTimeWeekendSchedule,
@@ -107,8 +131,10 @@ fun watchPrefs(): List<SettingsItem> {
     val coreConfig by coreConfigHolder.config.collectAsState()
     val weatherFetcher = koinInject<WeatherFetcher>()
     val quickLaunchOptions = quickLaunchOptions(libPebble)
-    val mapped = remember(settings, quickLaunchOptions, coreConfig) {
+    val watchType = lastConnectedWatch()?.watchType?.watchType
+    val mapped = remember(settings, quickLaunchOptions, coreConfig, watchType) {
         settings.inLayoutOrder()
+            .hideUnsupportedHardwarePrefs(watchType)
             .hidePresetManagedBacklightPrefs()
             .groupQuietTimeScheduleHours()
             .hideUnusedBacklightColorPrefs(coreConfig.backlightColorAutoSunriseSunset)

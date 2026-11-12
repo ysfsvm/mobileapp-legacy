@@ -65,3 +65,12 @@ fun WatchType.supportsBtClassic(): Boolean = when (this) {
     WatchType.FLINT -> false
     WatchType.GABBRO -> false
 }
+
+/** An RGB backlight whose colour can be set (Pebble Time 2). */
+fun WatchType.hasRgbBacklight(): Boolean = this == WatchType.EMERY
+
+/** A touchscreen (Pebble Time 2 and Pebble Round 2). */
+fun WatchType.hasTouchscreen(): Boolean = when (this) {
+    WatchType.EMERY, WatchType.GABBRO -> true
+    else -> false
+}
