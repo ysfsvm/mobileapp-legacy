@@ -67,6 +67,17 @@ class LanguagePackRepositoryTest {
     }
 
     @Test
+    fun legacyHardwareRunningCorePebbleOsGetsCurrentPacks() {
+        val hardware = WatchHardwarePlatform.PEBBLE_SNOWY_DVT
+        val packs = selectLanguagePacks(
+            listOf(legacy("de_DE", hardware.revision), legacy("he_IL", hardware.revision)),
+            listOf(published), hardware, "de-DE", corePebbleOs = true,
+        )
+        assertEquals(listOf("de_DE", "he_IL"), packs.map { it.isoLocal })
+        assertEquals(published, packs.first().published)
+    }
+
+    @Test
     fun legacyHardwareRetainsExactHardwarePreference() {
         val hardware = WatchHardwarePlatform.PEBBLE_SNOWY_DVT
         val exact = legacy("de_DE", hardware.revision, "exact")

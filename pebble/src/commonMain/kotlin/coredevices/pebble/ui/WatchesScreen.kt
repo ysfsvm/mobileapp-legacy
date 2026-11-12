@@ -142,7 +142,7 @@ import coredevices.pebble.PebbleDeepLinkHandler
 import coredevices.pebble.PebbleFeatures
 import coredevices.pebble.account.PebbleAccount
 import coredevices.pebble.firmware.FirmwareUpdateUiTracker
-import coredevices.pebble.firmware.isCoreDevice
+import coredevices.pebble.firmware.runsCorePebbleOs
 import coredevices.pebble.rememberLibPebble
 import coredevices.pebble.services.LanguagePackRepository
 import coredevices.pebble.services.displayName
@@ -1429,7 +1429,7 @@ fun WatchMenu(watch: PebbleDevice, navBarNav: NavBarNav) {
                     }
                 )
 
-                if (watch.watchInfo.platform.isCoreDevice()) {
+                if (watch.watchInfo.runsCorePebbleOs()) {
                     DropdownMenuItem(
                         text = { Text("Battery Life") },
                         leadingIcon = {

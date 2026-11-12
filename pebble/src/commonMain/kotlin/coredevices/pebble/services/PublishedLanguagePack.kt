@@ -85,6 +85,7 @@ internal fun selectLanguagePacks(
     published: List<PublishedLanguagePack>,
     platform: WatchHardwarePlatform,
     preferredLocale: String,
+    corePebbleOs: Boolean = platform.isCoreDevice(),
 ): List<LanguagePack> {
     val revision = platform.revision
     val fallbackRevision = platform.languagePackPlatform().revision
@@ -96,7 +97,7 @@ internal fun selectLanguagePacks(
             else -> false
         }
     }
-    val current = if (platform.isCoreDevice()) published.map { it.asLanguagePack() } else emptyList()
+    val current = if (corePebbleOs) published.map { it.asLanguagePack() } else emptyList()
     val currentLocales = current.map { canonicalLocale(it.isoLocal) }.toSet()
     // Source replacement is by locale, not version: legacy versions use a different sequence.
     return (current + compatibleLegacy.filter { canonicalLocale(it.isoLocal) !in currentLocales })

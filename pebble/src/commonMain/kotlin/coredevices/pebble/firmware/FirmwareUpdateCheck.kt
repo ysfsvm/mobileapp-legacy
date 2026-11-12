@@ -7,6 +7,7 @@ import coredevices.pebble.services.Memfault
 import coredevices.util.CoreConfigFlow
 import io.rebble.libpebblecommon.connection.FirmwareUpdateCheckResult
 import io.rebble.libpebblecommon.metadata.WatchHardwarePlatform
+import io.rebble.libpebblecommon.metadata.isCorePebbleOs
 import io.rebble.libpebblecommon.metadata.WatchHardwarePlatform.PEBBLE_BOBBY_SMILES
 import io.rebble.libpebblecommon.metadata.WatchHardwarePlatform.PEBBLE_ONE_BIGBOARD
 import io.rebble.libpebblecommon.metadata.WatchHardwarePlatform.PEBBLE_ONE_BIGBOARD_2
@@ -98,6 +99,10 @@ class FirmwareUpdateCheck(
     private suspend fun doCheck(watch: WatchInfo): FirmwareUpdateCheckResult = when {
         watch.platform == UNKNOWN -> FirmwareUpdateCheckResult.UpdateCheckFailed("Unknown platform")
         watch.platform.isCoreDevice() -> engDashOta.getLatestFirmware(watch)
+        // A legacy watch running a community port of Core's PebbleOS: its builds are published
+        // neither here nor in cohorts, which only knows Pebble's own firmware. Its recovery
+        // firmware is Pebble's, so a watch in recovery still gets Pebble's firmware back.
+        watch.runningFwVersion.isCorePebbleOs() -> FirmwareUpdateCheckResult.FoundNoUpdate
         else -> cohorts.getLatestFirmware(watch)
     }
 
@@ -105,6 +110,10 @@ class FirmwareUpdateCheck(
         private val CACHE_TTL: Duration = 15.minutes
     }
 }
+
+/** Whether the watch runs Core's PebbleOS: a Core watch, or a legacy one running a port of it. */
+fun WatchInfo.runsCorePebbleOs(): Boolean =
+    platform.isCoreDevice() || runningFwVersion.isCorePebbleOs()
 
 fun WatchHardwarePlatform.isCoreDevice(): Boolean = when (this) {
     UNKNOWN, PEBBLE_ONE_EV_1, PEBBLE_ONE_EV_2, PEBBLE_ONE_EV_2_3, PEBBLE_ONE_EV_2_4,

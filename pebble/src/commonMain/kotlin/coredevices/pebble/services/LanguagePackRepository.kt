@@ -4,6 +4,7 @@ import androidx.compose.ui.text.intl.Locale
 import co.touchlab.kermit.Logger
 import com.russhwolf.settings.Settings
 import coredevices.pebble.firmware.isCoreDevice
+import coredevices.pebble.firmware.runsCorePebbleOs
 import io.ktor.client.HttpClient
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
@@ -60,7 +61,7 @@ class LanguagePackRepository(
     }
 
     suspend fun languagePacksForWatch(watch: ConnectedPebbleDevice): List<LanguagePack> = withContext(Dispatchers.IO) {
-        if (watch.watchInfo.platform.isCoreDevice()) {
+        if (watch.watchInfo.runsCorePebbleOs()) {
             try {
                 val text = withTimeoutOrNull(10_000) {
                     downloadBytes(LANGUAGE_MANIFEST_URL, 1_048_576).decodeToString()
@@ -81,7 +82,7 @@ class LanguagePackRepository(
 
     fun cachedLanguagePacksForWatch(watch: ConnectedPebbleDevice): List<LanguagePack> =
         selectLanguagePacks(languagePacks, publishedPacks, watch.watchInfo.platform,
-            Locale.current.toLanguageTag())
+            Locale.current.toLanguageTag(), watch.watchInfo.runsCorePebbleOs())
 
     suspend fun prepareDownload(pack: LanguagePack): Path = withContext(Dispatchers.IO) {
         val published = requireNotNull(pack.published)
