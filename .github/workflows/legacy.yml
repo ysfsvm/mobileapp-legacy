@@ -38,6 +38,16 @@ jobs:
           key: android-deps-${{ runner.os }}-${{ hashFiles('gradle/**', 'gradlew*', 'gradle.properties', '*.gradle*') }}
           restore-keys: |
             android-deps-${{ runner.os }}-
+      - name: Use the fork's debug signing key
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          # Without the secret (a fork of this fork, a pull request from one) the build
+          # makes its own debug key; such an APK cannot update an installed one.
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            mkdir -p ~/.android
+            echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+          fi
       - name: Use dummy google-services json
         run: mv androidApp/src/google-services-dummy.json androidApp/src/google-services.json
       - name: Build and Test
@@ -45,6 +55,10 @@ jobs:
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Show the APK's signing certificate
+        run: |
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs androidApp/build/outputs/apk/debug/*.apk | grep -i "SHA-256"
       - name: Store the APK
         uses: actions/upload-artifact@v4
         with:
