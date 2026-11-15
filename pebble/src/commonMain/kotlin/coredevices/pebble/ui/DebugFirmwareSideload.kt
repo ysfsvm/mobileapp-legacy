@@ -269,6 +269,7 @@ fun DebugFirmwareSideload(watchIdentifier: String, coreNav: CoreNav) {
                         }, modifier = Modifier.padding(5.dp)) {
                             Text("Sideload from container")
                         }
+                        DebugInstallWatchFiles(watch)
                     }
 
                     is UiFirmwareUpdateStatus.Starting -> {
