@@ -1,5 +1,19 @@
 # Pebble Mobile app
 
+> **This is a fork.** It is Core Devices' [Pebble mobile app](https://github.com/coredevices/mobileapp)
+> with the changes needed by legacy Pebble watches (Pebble Time) that run Core's PebbleOS through the
+> community port [PebbleOS-legacy](https://github.com/ysfsvm/PebbleOS-legacy). It is not made, endorsed or
+> supported by Core Devices. The rest of this page is Core's own text.
+>
+> | Branch | Content |
+> |---|---|
+> | `master` | Core's app, unchanged, at the commit the fork is based on. |
+> | `dev/legacy-core-firmware-r2` | The fork: such watches are treated as running Core's firmware (BLE scan, firmware updates by sideload, settings for the hardware the watch has). |
+> | `feature/local-battery` | The fork plus a "Battery Life" page that works without Core's server: the watch's hourly records are kept on the phone, decoded and charted locally, and can be exported. |
+>
+> A self-built copy has no Core account sign-in (the Firebase configuration in this tree is a placeholder), so
+> the features that need Core's servers do not work in it.
+
 Welcome to the official source code for the Pebble mobile app. Download the app from the [iOS Appstore](https://apps.apple.com/us/app/pebble-core/id6743771967) or [Google Play](https://play.google.com/store/apps/details?id=coredevices.coreapp&hl=en_US). The app is entirely open source. 
 
 This app supports ALL Pebble watches, and Pebble Index 01 rings.
