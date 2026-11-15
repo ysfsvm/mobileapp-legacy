@@ -1,0 +1,52 @@
+name: Legacy watches
+
+# Builds and tests the Android debug app of this fork and keeps the APK.
+# Core's own workflow also builds iOS; it is switched off for the fork.
+
+on:
+  push:
+    branches: ['dev/**', 'feature/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: legacy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup JDK
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: 'temurin'
+          java-version: 17
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Fetch tags
+        run: git fetch --tags --force
+      - name: Cache build deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-deps-${{ runner.os }}-${{ hashFiles('gradle/**', 'gradlew*', 'gradle.properties', '*.gradle*') }}
+          restore-keys: |
+            android-deps-${{ runner.os }}-
+      - name: Use dummy google-services json
+        run: mv androidApp/src/google-services-dummy.json androidApp/src/google-services.json
+      - name: Build and Test
+        run: ./gradlew :androidApp:assembleDebug testDebugUnitTest testAndroidHostTest jvmTest
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Store the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidApp-debug
+          path: androidApp/build/outputs/apk/debug/*.apk
