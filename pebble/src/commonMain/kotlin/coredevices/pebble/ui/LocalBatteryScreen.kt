@@ -1,5 +1,6 @@
 package coredevices.pebble.ui
 
+import PlatformShareLauncher
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -14,7 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +48,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.touchlab.kermit.Logger
 import coreapp.pebble.generated.resources.Res
 import coreapp.pebble.generated.resources.battery_local_accuracy
 import coreapp.pebble.generated.resources.battery_local_ble_max
@@ -56,6 +63,8 @@ import coreapp.pebble.generated.resources.battery_local_daily
 import coreapp.pebble.generated.resources.battery_local_empty
 import coreapp.pebble.generated.resources.battery_local_estimate
 import coreapp.pebble.generated.resources.battery_local_estimate_detail
+import coreapp.pebble.generated.resources.battery_local_export
+import coreapp.pebble.generated.resources.battery_local_export_failed
 import coreapp.pebble.generated.resources.battery_local_hour_ble
 import coreapp.pebble.generated.resources.battery_local_hour_cpu
 import coreapp.pebble.generated.resources.battery_local_hour_screen
@@ -81,6 +90,7 @@ import kotlinx.datetime.UtcOffset
 import kotlinx.datetime.asTimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
+import kotlinx.coroutines.launch
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
@@ -102,11 +112,28 @@ private const val FullDayHours = 20.0
 fun LocalBatteryScreen(topBarParams: TopBarParams) {
     val repository = koinInject<LocalBatteryRepository>()
     val records by remember { repository.records() }.collectAsState(null)
+    val shareLauncher = koinInject<PlatformShareLauncher>()
+    val scope = rememberCoroutineScope()
     val title = stringResource(Res.string.battery_local_title)
+    val exportLabel = stringResource(Res.string.battery_local_export)
+    val exportFailed = stringResource(Res.string.battery_local_export_failed)
     LaunchedEffect(Unit) {
         topBarParams.searchAvailable(null)
         topBarParams.title(title)
-        topBarParams.actions { }
+        topBarParams.actions {
+            IconButton(onClick = {
+                scope.launch {
+                    try {
+                        shareLauncher.share(null, repository.exportToFile(), "application/json")
+                    } catch (e: Exception) {
+                        Logger.withTag("LocalBatteryScreen").w(e) { "Export failed" }
+                        topBarParams.showSnackbar(exportFailed)
+                    }
+                }
+            }) {
+                Icon(Icons.Default.Share, contentDescription = exportLabel)
+            }
+        }
     }
 
     val all = records

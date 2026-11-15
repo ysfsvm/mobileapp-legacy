@@ -30,5 +30,7 @@
     <string name="battery_local_ble_mid">medium</string>
     <string name="battery_local_ble_max">long</string>
     <string name="battery_local_ble_other">other</string>
+    <string name="battery_local_export">Export records</string>
+    <string name="battery_local_export_failed">Couldn't export the battery records</string>
     <string name="battery_local_unknown_format">%1$s records in an unknown format are kept but not shown.</string>
 </resources>
