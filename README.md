@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/logo-legacy-dark.svg">
+    <img src=".github/logo-legacy-light.svg" alt="PebbleOS legacy" width="320">
+  </picture>
+</p>
+
 # Pebble Mobile app
 
 > **This is a fork.** It is Core Devices' [Pebble mobile app](https://github.com/coredevices/mobileapp)
