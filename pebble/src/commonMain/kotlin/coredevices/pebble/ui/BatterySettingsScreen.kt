@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
 import com.russhwolf.settings.Settings
+import coredevices.pebble.battery.keepsHeartbeatsLocally
 import coredevices.pebble.ui.SettingsKeys.KEY_ENABLE_MEMFAULT_UPLOADS
 import coredevices.ui.PebbleElevatedButton
 import coredevices.ui.PebbleWebview
@@ -50,6 +51,7 @@ fun BatterySettingsScreen(navBarNav: NavBarNav, topBarParams: TopBarParams) {
     val apiConfig = koinInject<CommonApiConfig>()
     val settings = koinInject<Settings>()
     val analyticsEnabled = settings.getBoolean(KEY_ENABLE_MEMFAULT_UPLOADS, true)
+    val keepsHeartbeatsLocally = apiConfig.keepsHeartbeatsLocally()
     val accountEmail by Firebase.auth.idTokenChanged
         .map { it?.emailOrNull }
         .distinctUntilChanged()
@@ -96,7 +98,7 @@ fun BatterySettingsScreen(navBarNav: NavBarNav, topBarParams: TopBarParams) {
         SignInDialog(onDismiss = { showSignInDialog = false })
     }
 
-    if (accountEmail == null) {
+    if (accountEmail == null && !keepsHeartbeatsLocally) {
         SignedOutBatteryContent(onSignIn = { showSignInDialog = true })
         LaunchedEffect(Unit) {
             topBarParams.actions { }
@@ -118,6 +120,11 @@ fun BatterySettingsScreen(navBarNav: NavBarNav, topBarParams: TopBarParams) {
         LaunchedEffect(Unit) {
             topBarParams.actions { }
         }
+        return
+    }
+
+    if (keepsHeartbeatsLocally) {
+        LocalBatteryScreen(topBarParams)
         return
     }
 

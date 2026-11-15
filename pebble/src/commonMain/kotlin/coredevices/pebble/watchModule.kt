@@ -34,6 +34,7 @@ import coredevices.pebble.services.HybridTranscription
 import coredevices.pebble.services.LanguagePackRepository
 import coredevices.pebble.services.PluginSourceLoader
 import coredevices.pebble.services.Memfault
+import coredevices.pebble.battery.LocalBatteryRepository
 import coredevices.pebble.battery.LocalHeartbeatStore
 import coredevices.pebble.services.AnalyticsHeartbeatQueue
 import coredevices.pebble.services.AnalyticsIngest
@@ -232,6 +233,7 @@ val watchModule = module {
     singleOf(::AnalyticsIngest)
     singleOf(::AnalyticsHeartbeatQueue)
     singleOf(::LocalHeartbeatStore)
+    singleOf(::LocalBatteryRepository)
     singleOf(::ContactDeveloperApi)
     factoryOf(::Cohorts)
     singleOf(::FirmwareUpdateCheck)

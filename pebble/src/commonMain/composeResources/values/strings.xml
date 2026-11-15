@@ -8,4 +8,27 @@
     <string name="app_store">App Store</string>
     <string name="index">Index</string>
     <string name="health">Health</string>
+    <string name="battery_local_title">Battery Life</string>
+    <string name="battery_local_empty">No battery records yet. The watch sends one every hour; the first arrives about an hour after the watch starts. Records are kept on this phone for 180 days.</string>
+    <string name="battery_local_last_record">Last record %1$s · %2$s</string>
+    <string name="battery_local_estimate">About %1$s days per charge</string>
+    <string name="battery_local_estimate_detail">%1$s per day, from %2$s h of discharge in the last 14 days</string>
+    <string name="battery_local_not_enough">Not enough data for an estimate yet: %1$s h of discharge recorded, at least 24 h are needed.</string>
+    <string name="battery_local_no_drop">No measurable drop over %1$s h of discharge yet.</string>
+    <string name="battery_local_accuracy">The watch estimates the percentage from the battery voltage. A single hour is noisy; read the trend over a day or more.</string>
+    <string name="battery_local_chart_level">Battery level, last 7 days</string>
+    <string name="battery_local_chart_voltage">Battery voltage, last 7 days</string>
+    <string name="battery_local_charging_legend">Shaded: charging</string>
+    <string name="battery_local_daily">Drain per day</string>
+    <string name="battery_local_partial_day">%1$s h recorded</string>
+    <string name="battery_local_hourly">Hour by hour</string>
+    <string name="battery_local_charging">Charging</string>
+    <string name="battery_local_hour_cpu">CPU awake %1$s · sleep %2$s · stop %3$s</string>
+    <string name="battery_local_hour_screen">Backlight %1$s s · %2$s display updates</string>
+    <string name="battery_local_hour_ble">Connected %1$s min · connection interval %2$s</string>
+    <string name="battery_local_ble_min">short</string>
+    <string name="battery_local_ble_mid">medium</string>
+    <string name="battery_local_ble_max">long</string>
+    <string name="battery_local_ble_other">other</string>
+    <string name="battery_local_unknown_format">%1$s records in an unknown format are kept but not shown.</string>
 </resources>
