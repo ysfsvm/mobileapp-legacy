@@ -168,6 +168,7 @@ class RealFirmwareUpdater(
     private val connectionCoroutineScope: ConnectionCoroutineScope,
     private val firmwareUpdateManager: FirmwareUpdateManager,
     private val pendingInstalls: PendingFirmwareInstalls,
+    private val pendingBundleFiles: PendingBundleFiles,
     private val lastStates: LastFirmwareUpdateStates,
     private val watchConfig: WatchConfigFlow,
 ) : FirmwareUpdater {
@@ -599,6 +600,7 @@ class RealFirmwareUpdater(
             } else {
                 pendingInstalls.clear(identifier)
             }
+            recordBundleFiles(manifest)
             _firmwareUpdateState.value = FirmwareUpdateStatus.WaitingForReboot(update, trigger)
             systemService.sendFirmwareUpdateComplete()
             return
@@ -622,6 +624,12 @@ class RealFirmwareUpdater(
             logger.e(e) { "Firmware update failed (unknown): ${e.message}" }
            _firmwareUpdateState.value = FirmwareUpdateStatus.NotInProgress.Idle(e, trigger)
         }
+    }
+
+    private fun recordBundleFiles(manifest: PbzManifestWrapper) = try {
+        pendingBundleFiles.record(identifier, manifest)
+    } catch (e: Exception) {
+        logger.w(e) { "Could not record the bundle's files; they won't be installed: ${e.message}" }
     }
 
     private suspend fun determineResumeOffsets(manifest: PbzManifestWrapper): ResumeOffsets {

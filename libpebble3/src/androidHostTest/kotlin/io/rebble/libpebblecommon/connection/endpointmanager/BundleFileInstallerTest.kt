@@ -1,6 +1,15 @@
 package io.rebble.libpebblecommon.connection.endpointmanager
 
 import TestPebbleProtocolHandler
+import kotlin.time.Instant
+import kotlin.test.assertNull
+import kotlinx.coroutines.launch
+import io.rebble.libpebblecommon.services.FirmwareVersion
+import io.rebble.libpebblecommon.disk.pbz.PbzFirmware
+import io.rebble.libpebblecommon.connection.UserFacingError
+import io.rebble.libpebblecommon.connection.PebbleSocketIdentifier
+import io.rebble.libpebblecommon.ErrorTracker
+import com.russhwolf.settings.MapSettings
 import io.rebble.libpebblecommon.connection.endpointmanager.putbytes.PutBytesSession
 import io.rebble.libpebblecommon.di.ConnectionCoroutineScope
 import io.rebble.libpebblecommon.disk.pbz.TestBundleFile
@@ -83,10 +92,44 @@ class BundleFileInstallerTest {
     private val other = ByteArray(10) { it.toByte() }
     private val emoji = TestBundleFile("emoji_snowy_dvt.pbpack", "emoji", pack)
 
-    private fun TestScope.installer(watch: FakePutBytesWatch) = BundleFileInstaller(
-        watch.putBytesSession(this),
+    private val identifier = PebbleSocketIdentifier("test")
+    private val settings = MapSettings()
+    private val pending = PendingBundleFiles(settings)
+    private val errorTracker = ErrorTracker()
+
+    private fun TestScope.installer(session: PutBytesSession) = BundleFileInstaller(
+        identifier,
+        session,
         ConnectionCoroutineScope(backgroundScope.coroutineContext),
+        PendingBundleFiles(settings),
+        errorTracker,
     )
+
+    private fun TestScope.installer(watch: FakePutBytesWatch) = installer(watch.putBytesSession(this))
+
+    private fun TestScope.reportedErrors(): List<UserFacingError> {
+        val errors = mutableListOf<UserFacingError>()
+        backgroundScope.launch { errorTracker.userFacingErrors.collect { errors += it } }
+        testScheduler.runCurrent()
+        return errors
+    }
+
+    /** A connection to a watch running [versionTag]; returns once it has nothing left to do. */
+    private fun TestScope.connect(watch: FakePutBytesWatch, versionTag: String = VERSION) {
+        installer(watch).init(
+            FirmwareVersion.from(
+                tag = versionTag,
+                isRecovery = false,
+                gitHash = "",
+                timestamp = Instant.DISTANT_PAST,
+                isDualSlot = false,
+                isSlot0 = false,
+            )!!
+        )
+        testScheduler.runCurrent()
+    }
+
+    private fun updatedFrom(bundle: Path) = pending.record(identifier, PbzFirmware(bundle).manifests.single())
 
     private fun installed(target: String) = BundleFileResult(target, BundleFileOutcome.Installed)
     private fun skipped(target: String) = BundleFileResult(target, BundleFileOutcome.NotAsInManifest)
@@ -156,7 +199,7 @@ class BundleFileInstallerTest {
     fun silentWatchFails() = runTest {
         val scope = ConnectionCoroutineScope(backgroundScope.coroutineContext)
         val session = PutBytesSession(PutBytesService(TestPebbleProtocolHandler {}, scope))
-        val results = BundleFileInstaller(session, scope).installBundleFiles(writeTestPbz(files = listOf(emoji)))
+        val results = installer(session).installBundleFiles(writeTestPbz(files = listOf(emoji)))
 
         assertEquals(listOf(failed("emoji")), results)
         assertEquals(null, session.currentSession.value)
@@ -182,5 +225,117 @@ class BundleFileInstallerTest {
         assertFalse(installer(watch).installFile(Path(file.absolutePath), "emoji"))
         assertFalse(installer(watch).installFile(Path(file.absolutePath + ".missing"), "emoji"))
         assertEquals(emptyList(), watch.packets)
+    }
+
+    @Test
+    fun installsFilesOnceWatchRunsTheBundlesFirmware() = runTest {
+        val errors = reportedErrors()
+        updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
+        val watch = FakePutBytesWatch()
+        connect(watch)
+
+        watch.assertFilesSent("emoji" to pack)
+        assertNull(pending.get(identifier))
+
+        val nextConnection = FakePutBytesWatch()
+        connect(nextConnection)
+        assertEquals(emptyList(), nextConnection.packets)
+        assertEquals(emptyList(), errors)
+    }
+
+    @Test
+    fun watchReportingTagWithoutPrefixCounts() = runTest {
+        updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
+        val watch = FakePutBytesWatch()
+        connect(watch, VERSION.removePrefix("v"))
+        watch.assertFilesSent("emoji" to pack)
+    }
+
+    @Test
+    fun otherFirmwareDropsTheFiles() = runTest {
+        updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
+        val watch = FakePutBytesWatch()
+        connect(watch, "v4.46.0")
+
+        assertEquals(emptyList(), watch.packets)
+        assertNull(pending.get(identifier))
+    }
+
+    @Test
+    fun bundleWithoutFilesLeavesNothingPending() = runTest {
+        updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
+        updatedFrom(writeTestPbz("v4.48.0"))
+        assertNull(pending.get(identifier))
+    }
+
+    @Test
+    fun failedTransferIsRetriedOnTheNextConnection() = runTest {
+        val errors = reportedErrors()
+        updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
+        connect(FakePutBytesWatch(nack = { it is PutBytesInit }))
+
+        assertEquals(1, pending.get(identifier)?.attempts)
+        assertEquals(emptyList(), errors)
+
+        val watch = FakePutBytesWatch()
+        connect(watch)
+        watch.assertFilesSent("emoji" to pack)
+        assertNull(pending.get(identifier))
+    }
+
+    @Test
+    fun givesUpAndReportsAfterRepeatedFailures() = runTest {
+        val errors = reportedErrors()
+        updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
+        repeat(BundleFileInstaller.MAX_ATTEMPTS) {
+            assertEquals(emptyList(), errors)
+            connect(FakePutBytesWatch(nack = { it is PutBytesInit }))
+        }
+
+        assertIs<UserFacingError.FailedToInstallBundleFiles>(errors.single())
+        assertNull(pending.get(identifier))
+    }
+
+    @Test
+    fun attemptsThatNeverReturnedCount() = runTest {
+        val errors = reportedErrors()
+        updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
+        repeat(BundleFileInstaller.MAX_ATTEMPTS) { pending.startAttempt(identifier) }
+        val watch = FakePutBytesWatch()
+        connect(watch)
+
+        assertEquals(emptyList(), watch.packets)
+        assertIs<UserFacingError.FailedToInstallBundleFiles>(errors.single())
+        assertNull(pending.get(identifier))
+    }
+
+    @Test
+    fun replacedBundleIsReportedAndNotSent() = runTest {
+        val errors = reportedErrors()
+        val bundle = writeTestPbz(VERSION, listOf(emoji))
+        updatedFrom(bundle)
+        File(writeTestPbz("v4.48.0", listOf(emoji)).toString()).copyTo(File(bundle.toString()), overwrite = true)
+        val watch = FakePutBytesWatch()
+        connect(watch)
+
+        assertEquals(emptyList(), watch.packets)
+        assertIs<UserFacingError.FailedToInstallBundleFiles>(errors.single())
+        assertNull(pending.get(identifier))
+    }
+
+    @Test
+    fun fileNotAsInManifestIsNotRetried() = runTest {
+        val errors = reportedErrors()
+        updatedFrom(writeTestPbz(VERSION, listOf(TestBundleFile("wrong_crc.bin", "emoji", pack, crc = 1))))
+        val watch = FakePutBytesWatch()
+        connect(watch)
+
+        assertEquals(emptyList(), watch.packets)
+        assertNull(pending.get(identifier))
+        assertEquals(emptyList(), errors)
+    }
+
+    private companion object {
+        const val VERSION = "v4.47.0-30-g9ceecbba47"
     }
 }

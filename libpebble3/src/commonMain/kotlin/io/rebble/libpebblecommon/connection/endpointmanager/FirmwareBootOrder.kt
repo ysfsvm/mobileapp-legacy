@@ -9,8 +9,10 @@ private val RELEASE_TAG = Regex("^v?\\d+(?:\\.\\d+)?(?:\\.\\d+)?(?:-(?:beta|rc)\
 internal val FirmwareVersion.isRelease: Boolean get() = RELEASE_TAG.matches(stringVersion)
 
 /** Some firmware reports its tag without the leading v. */
-internal fun FirmwareVersion.isSameBuildAs(other: FirmwareVersion): Boolean =
-    stringVersion.removePrefix("v") == other.stringVersion.removePrefix("v")
+internal fun FirmwareVersion.isSameBuildAs(other: FirmwareVersion): Boolean = isSameBuildAs(other.stringVersion)
+
+internal fun FirmwareVersion.isSameBuildAs(versionTag: String): Boolean =
+    stringVersion.removePrefix("v") == versionTag.removePrefix("v")
 
 /**
  * Whether a dual-slot watch boots [target] once it's installed into the other slot. Of two valid

@@ -1,19 +1,24 @@
 package io.rebble.libpebblecommon.connection.endpointmanager
 
 import co.touchlab.kermit.Logger
+import io.rebble.libpebblecommon.ErrorTracker
 import io.rebble.libpebblecommon.connection.ConnectedPebble
+import io.rebble.libpebblecommon.connection.PebbleIdentifier
+import io.rebble.libpebblecommon.connection.UserFacingError
 import io.rebble.libpebblecommon.connection.endpointmanager.putbytes.PutBytesSession
 import io.rebble.libpebblecommon.di.ConnectionCoroutineScope
 import io.rebble.libpebblecommon.disk.pbz.PbzFirmware
 import io.rebble.libpebblecommon.metadata.pbz.manifest.PbzBundleFile
 import io.rebble.libpebblecommon.metadata.pbz.manifest.PbzManifestWrapper
 import io.rebble.libpebblecommon.packets.ObjectType
+import io.rebble.libpebblecommon.services.FirmwareVersion
 import io.rebble.libpebblecommon.util.crc32
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.io.Source
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
@@ -31,10 +36,64 @@ data class BundleFileResult(val target: String, val outcome: BundleFileOutcome)
 
 /** Puts files on the watch's filesystem: the ones a firmware bundle carries, or a single one. */
 class BundleFileInstaller(
+    private val identifier: PebbleIdentifier,
     private val putBytesSession: PutBytesSession,
     private val connectionCoroutineScope: ConnectionCoroutineScope,
+    private val pendingBundleFiles: PendingBundleFiles,
+    private val errorTracker: ErrorTracker,
 ) : ConnectedPebble.BundleFiles {
-    private val logger = Logger.withTag("BundleFileInstaller")
+    private val logger = Logger.withTag("BundleFileInstaller-$identifier")
+
+    /** Installs the files of the bundle the watch was last updated from, if it now runs that firmware. */
+    fun init(runningFwVersion: FirmwareVersion) {
+        val pending = pendingBundleFiles.get(identifier) ?: return
+        if (!runningFwVersion.isSameBuildAs(pending.versionTag)) {
+            logger.w {
+                "Not installing the files of ${pending.versionTag}: the watch runs ${runningFwVersion.stringVersion}"
+            }
+            pendingBundleFiles.clear(identifier)
+            return
+        }
+        connectionCoroutineScope.launch { installPending() }
+    }
+
+    private suspend fun installPending() {
+        val pending = pendingBundleFiles.startAttempt(identifier) ?: return
+        if (pending.attempts > MAX_ATTEMPTS) {
+            giveUp("the transfer did not finish in $MAX_ATTEMPTS attempts")
+            return
+        }
+        val manifest = try {
+            PbzFirmware(Path(pending.bundlePath)).manifests.firstOrNull {
+                it.manifestPath.toString() == pending.manifestPath &&
+                    it.manifest.firmware.versionTag == pending.versionTag
+            }
+        } catch (e: Exception) {
+            logger.w(e) { "Failed to read firmware bundle: ${e.message}" }
+            null
+        }
+        if (manifest == null) {
+            giveUp("the firmware bundle is no longer on the phone")
+            return
+        }
+        logger.i { "Installing the files of ${pending.versionTag} (attempt ${pending.attempts})" }
+        val results = install(manifest)
+        when {
+            results.none { it.outcome == BundleFileOutcome.Failed } -> pendingBundleFiles.clear(identifier)
+            pending.attempts >= MAX_ATTEMPTS -> giveUp("the transfer failed $MAX_ATTEMPTS times")
+            else -> logger.w { "Files of ${pending.versionTag} not installed; trying again on the next connection" }
+        }
+    }
+
+    private fun giveUp(reason: String) {
+        logger.e { "Giving up on the files of the firmware update: $reason" }
+        pendingBundleFiles.clear(identifier)
+        errorTracker.reportError(
+            UserFacingError.FailedToInstallBundleFiles(
+                "The files that came with the firmware update were not installed: $reason"
+            )
+        )
+    }
 
     override suspend fun installBundleFiles(
         bundle: Path,
@@ -132,6 +191,10 @@ class BundleFileInstaller(
         if (e is CancellationException && e !is TimeoutCancellationException) throw e
         logger.w(e) { "Failed to install '$target': ${e.message}" }
         false
+    }
+
+    companion object {
+        const val MAX_ATTEMPTS = 3
     }
 
     /** Runs [block] for as long as the watch stays connected, whatever the caller's dispatcher. */

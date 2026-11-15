@@ -293,6 +293,7 @@ class RealPebbleConnector(
         voiceSessionManager.init()
         dataLoggingService.realInit(watchInfo)
         appOrderManager.init(forceResend = watchInfo.isUnfaithful || !previouslyConnected)
+        bundleFileInstaller.init(watchInfo.runningFwVersion)
 
         _state.value = Connected.ConnectedNotInPrf(
             identifier = identifier,
