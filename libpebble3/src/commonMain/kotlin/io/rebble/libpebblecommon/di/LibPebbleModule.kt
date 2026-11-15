@@ -79,6 +79,7 @@ import io.rebble.libpebblecommon.connection.devconnection.DevConnectionResumer
 import io.rebble.libpebblecommon.connection.devconnection.DevConnectionServer
 import io.rebble.libpebblecommon.connection.endpointmanager.AppFetchProvider
 import io.rebble.libpebblecommon.connection.endpointmanager.AppOrderManager
+import io.rebble.libpebblecommon.connection.endpointmanager.BundleFileInstaller
 import io.rebble.libpebblecommon.connection.endpointmanager.CompanionAppLifecycleManager
 import io.rebble.libpebblecommon.connection.endpointmanager.DebugPebbleProtocolSender
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdater
@@ -576,7 +577,7 @@ fun initKoin(
                             get(), get(), get(),
                             get(), get(), get(),
                             get(), get(), get(), get(), get(),
-                            get(),
+                            get(), get(),
                         )
                     } bind PebbleConnector::class
                     scopedOf(::PebbleProtocolRunner)
@@ -628,6 +629,7 @@ fun initKoin(
                     scopedOf(::MusicControlManager)
                     scopedOf(::AppOrderManager)
                     scopedOf(::RealLanguagePackInstaller) bind LanguagePackInstaller::class
+                    scopedOf(::BundleFileInstaller)
                     scopedOf(::RealFirmwareUpdateManager) bind FirmwareUpdateManager::class
                     scoped {
                         DevConnectionManager(

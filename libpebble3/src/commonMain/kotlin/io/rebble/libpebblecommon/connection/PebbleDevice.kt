@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.ImageBitmap
 import io.rebble.libpebblecommon.connection.bt.ble.pebble.PebbleLeScanRecord
 import io.rebble.libpebblecommon.connection.bt.ble.pebble.ReversePpogVersion
+import io.rebble.libpebblecommon.connection.endpointmanager.BundleFileResult
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdateTrigger
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdater
 import io.rebble.libpebblecommon.connection.endpointmanager.InstalledLanguagePack
@@ -120,7 +121,8 @@ sealed interface ConnectedPebbleDevice :
     ConnectedPebble.CompanionAppControl,
     ConnectedPebble.Screenshot,
     ConnectedPebble.Language,
-    ConnectedPebble.Health
+    ConnectedPebble.Health,
+    ConnectedPebble.BundleFiles
 
 /**
  * Put all specific functionality here, rather than directly in [ConnectedPebbleDevice].
@@ -243,6 +245,14 @@ object ConnectedPebble {
         suspend fun requestHealthData(fullSync: Boolean): Boolean
     }
 
+    interface BundleFiles {
+        /** Installs the files a firmware bundle carries for the watch's filesystem, if any. */
+        suspend fun installBundleFiles(bundle: Path, onProgress: (Float) -> Unit = {}): List<BundleFileResult>
+
+        /** Puts [file] on the watch's filesystem as [target]. */
+        suspend fun installFile(file: Path, target: String, onProgress: (Float) -> Unit = {}): Boolean
+    }
+
     class Services(
         val debug: Debug,
         val appRunState: AppRunState,
@@ -259,6 +269,7 @@ object ConnectedPebble {
         val screenshot: Screenshot,
         val language: LanguageInstall,
         val health: Health,
+        val bundleFiles: BundleFiles,
     )
 
     class PrfServices(
