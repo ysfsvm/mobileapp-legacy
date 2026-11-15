@@ -33,4 +33,14 @@
     <string name="battery_local_export">Export records</string>
     <string name="battery_local_export_failed">Couldn't export the battery records</string>
     <string name="battery_local_unknown_format">%1$s records in an unknown format are kept but not shown.</string>
+    <string name="debug_watch_files_pick">Install watch files</string>
+    <string name="debug_watch_files_install">Install</string>
+    <string name="debug_watch_files_cancel">Cancel</string>
+    <string name="debug_watch_file_name">File name on the watch</string>
+    <string name="debug_watch_files_installing">Installing watch files: %1$d %</string>
+    <string name="debug_watch_files_installed">Installed on the watch</string>
+    <string name="debug_watch_files_skipped">Skipped, not as the manifest of the bundle describes</string>
+    <string name="debug_watch_files_failed">Not installed, the transfer failed</string>
+    <string name="debug_watch_files_none">This bundle has no files for the watch</string>
+    <string name="debug_watch_files_not_connected">The watch is not connected</string>
 </resources>
