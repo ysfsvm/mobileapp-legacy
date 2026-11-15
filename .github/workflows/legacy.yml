@@ -1,11 +1,13 @@
 name: Legacy watches
 
 # Builds and tests the Android debug app of this fork and keeps the APK.
+# A tag named like legacy-1 also publishes the APK as a GitHub release.
 # Core's own workflow also builds iOS; it is switched off for the fork.
 
 on:
   push:
     branches: [legacy, 'dev/**', 'feature/**']
+    tags: ['legacy-*']
   pull_request:
   workflow_dispatch:
 
@@ -64,3 +66,32 @@ jobs:
         with:
           name: androidApp-debug
           path: androidApp/build/outputs/apk/debug/*.apk
+
+  release:
+    needs: android
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/legacy-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the APK
+        uses: actions/download-artifact@v4
+        with:
+          name: androidApp-debug
+          path: apk
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          mv apk/*.apk "pebble-legacy-app-${TAG}.apk"
+          sha256sum "pebble-legacy-app-${TAG}.apk" > SHA256SUMS.txt
+          cat > notes.md <<'EOF'
+          Core Devices' Pebble app with the changes legacy watches on the PebbleOS port need.
+          Not made or supported by Core Devices.
+
+          This is a debug build. It has no sign-in, so what needs Core's servers is off. It has
+          the same package name as Core's app from the store: remove that one first.
+          EOF
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
+            --notes-file notes.md --prerelease "pebble-legacy-app-${TAG}.apk" SHA256SUMS.txt
