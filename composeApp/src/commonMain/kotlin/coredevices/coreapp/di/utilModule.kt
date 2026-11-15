@@ -97,6 +97,7 @@ val utilModule = module {
     single { get<CoreDatabase>().memfaultChunkDao() }
     single { get<CoreDatabase>().analyticsHeartbeatDao() }
     single { get<CoreDatabase>().syncTaskDao() }
+    single { get<CoreDatabase>().localHeartbeatDao() }
     single { SyncManager(store = get<SyncTaskDao>(), handlers = { getAll<SyncHandler>() }, scheduler = get()) }
     single { UserConfigDao { get() } }
     single { CoreConfigHolder(defaultValue = CoreConfig(), get(), get()) }

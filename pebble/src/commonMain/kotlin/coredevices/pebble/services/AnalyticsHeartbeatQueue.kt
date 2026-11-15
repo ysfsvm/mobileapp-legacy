@@ -1,9 +1,12 @@
 package coredevices.pebble.services
 
+import CommonApiConfig
 import co.touchlab.kermit.Logger
 import com.russhwolf.settings.Settings
 import coredevices.database.AnalyticsHeartbeatDao
 import coredevices.database.AnalyticsHeartbeatEntity
+import coredevices.pebble.battery.LocalHeartbeatStore
+import coredevices.pebble.battery.keepsHeartbeatsLocally
 import coredevices.pebble.ui.SettingsKeys.KEY_ENABLE_MEMFAULT_UPLOADS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -27,6 +30,8 @@ class AnalyticsHeartbeatQueue(
     private val ingest: AnalyticsIngest,
     private val dao: AnalyticsHeartbeatDao,
     private val settings: Settings,
+    private val apiConfig: CommonApiConfig,
+    private val localStore: LocalHeartbeatStore,
 ) {
     private val logger = Logger.withTag("AnalyticsHeartbeatQueue")
     private val channel = Channel<PendingHeartbeat>(Channel.UNLIMITED)
@@ -98,6 +103,10 @@ class AnalyticsHeartbeatQueue(
     }
 
     private suspend fun persistToDb(item: PendingHeartbeat) {
+        if (apiConfig.keepsHeartbeatsLocally()) {
+            localStore.store(item.serial, item.fwVersion, item.tzOffsetMinutes, item.payload)
+            return
+        }
         dao.insert(AnalyticsHeartbeatEntity(
             serial = item.serial,
             fwVersion = item.fwVersion,
