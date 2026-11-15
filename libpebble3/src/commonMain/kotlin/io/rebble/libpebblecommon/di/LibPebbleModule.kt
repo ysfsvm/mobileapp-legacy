@@ -85,6 +85,7 @@ import io.rebble.libpebblecommon.connection.endpointmanager.DebugPebbleProtocolS
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdater
 import io.rebble.libpebblecommon.connection.endpointmanager.LanguagePackInstaller
 import io.rebble.libpebblecommon.connection.endpointmanager.LastFirmwareUpdateStates
+import io.rebble.libpebblecommon.connection.endpointmanager.PendingBundleFiles
 import io.rebble.libpebblecommon.connection.endpointmanager.PendingFirmwareInstalls
 import io.rebble.libpebblecommon.connection.endpointmanager.RealFirmwareUpdater
 import io.rebble.libpebblecommon.connection.endpointmanager.RealLanguagePackInstaller
@@ -514,6 +515,7 @@ fun initKoin(
                 singleOf(::LockerPluginLoader)
                 singleOf(::FirmwareDownloader)
                 singleOf(::PendingFirmwareInstalls)
+                singleOf(::PendingBundleFiles)
                 singleOf(::LastFirmwareUpdateStates)
                 singleOf(::JsTokenUtil)
                 singleOf(::Datalogging)
