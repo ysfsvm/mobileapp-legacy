@@ -17,6 +17,7 @@ data class PbzManifest(
     val resources: SystemResources? = null,
     @SerialName("js_tooling")
     val jsTooling: JsTooling? = null,
+    val files: List<PbzBundleFile> = emptyList(),
     val type: String
 )
 
@@ -30,4 +31,5 @@ data class PbzManifestWrapper(
     }
     fun getFirmware() = getFile(manifest.firmware.name)
     fun getResources() = manifest.resources?.let { getFile(it.name) }
+    fun getBundleFile(file: PbzBundleFile) = getFile(file.name)
 }

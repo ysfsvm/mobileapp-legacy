@@ -1,11 +1,14 @@
 package io.rebble.libpebblecommon.disk.pbz;
 
+import io.rebble.libpebblecommon.metadata.pbz.manifest.PbzBundleFile
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
+import kotlinx.io.readByteArray
 import kotlinx.io.readString
 import org.junit.Test
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
 class PbzFirmwareTest {
@@ -27,6 +30,28 @@ class PbzFirmwareTest {
         assertEquals("obelix-resources0", pbz.manifests[0].getResources()!!.buffered().readString())
         assertEquals("obelix1", pbz.manifests[1].getFirmware().buffered().readString())
         assertEquals("obelix-resources1", pbz.manifests[1].getResources()!!.buffered().readString())
+    }
+
+    @Test
+    fun bundleWithoutFiles() {
+        val pbz = PbzFirmware(loadResourceToFile("normal_asterix_test.pbz"))
+        assertEquals(emptyList(), pbz.manifests[0].manifest.files)
+        assertEquals(emptyList(), PbzFirmware(writeTestPbz()).manifests[0].manifest.files)
+    }
+
+    @Test
+    fun bundleWithFiles() {
+        val pack = ByteArray(1000) { it.toByte() }
+        val manifest = PbzFirmware(
+            writeTestPbz(files = listOf(TestBundleFile("emoji_snowy_dvt.pbpack", "emoji", pack)))
+        ).manifests.single()
+        assertEquals(
+            listOf(PbzBundleFile("emoji_snowy_dvt.pbpack", "emoji", 1000, stm32Crc(pack))),
+            manifest.manifest.files,
+        )
+        val file = manifest.manifest.files.single()
+        assertContentEquals(pack, manifest.getBundleFile(file).buffered().readByteArray())
+        assertEquals("firmware", manifest.getFirmware().buffered().readString())
     }
 
     private fun loadResourceToFile(resourceName: String): Path {
