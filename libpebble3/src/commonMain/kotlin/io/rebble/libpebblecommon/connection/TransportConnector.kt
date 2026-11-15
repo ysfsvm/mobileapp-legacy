@@ -11,6 +11,7 @@ import io.rebble.libpebblecommon.connection.bt.ble.pebble.ReversePpogVersion
 import io.rebble.libpebblecommon.connection.devconnection.DevConnectionManager
 import io.rebble.libpebblecommon.connection.endpointmanager.AppFetchProvider
 import io.rebble.libpebblecommon.connection.endpointmanager.AppOrderManager
+import io.rebble.libpebblecommon.connection.endpointmanager.BundleFileInstaller
 import io.rebble.libpebblecommon.connection.endpointmanager.CompanionAppLifecycleManager
 import io.rebble.libpebblecommon.connection.endpointmanager.DebugPebbleProtocolSender
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdater
@@ -165,6 +166,7 @@ class RealPebbleConnector(
     private val languagePackInstaller: RealLanguagePackInstaller,
     private val healthService: HealthService,
     private val notificationImageProvider: NotificationImageProvider,
+    private val bundleFileInstaller: BundleFileInstaller,
 ) : PebbleConnector {
     private val logger = Logger.withTag("PebbleConnector-$identifier")
     private val _state = MutableStateFlow<ConnectingPebbleState>(Inactive(identifier))
@@ -311,6 +313,7 @@ class RealPebbleConnector(
                 screenshot = screenshotService,
                 language = languagePackInstaller,
                 health = healthService,
+                bundleFiles = bundleFileInstaller,
             ),
             reversePpogVersion = reversePpogVersion,
         )

@@ -10,6 +10,7 @@ import io.rebble.libpebblecommon.calendar.NewCalendarEvent
 import io.rebble.libpebblecommon.calls.Call
 import io.rebble.libpebblecommon.connection.bt.BluetoothState
 import io.rebble.libpebblecommon.connection.bt.ble.pebble.ReversePpogVersion
+import io.rebble.libpebblecommon.connection.endpointmanager.BundleFileResult
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdateTrigger
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdater
 import io.rebble.libpebblecommon.connection.endpointmanager.InstalledLanguagePack
@@ -863,6 +864,11 @@ class FakeConnectedDevice(
     override val installedLanguagePack: InstalledLanguagePack? = null
 
     override suspend fun requestHealthData(fullSync: Boolean): Boolean = true
+
+    override suspend fun installBundleFiles(bundle: Path, onProgress: (Float) -> Unit): List<BundleFileResult> =
+        emptyList()
+
+    override suspend fun installFile(file: Path, target: String, onProgress: (Float) -> Unit): Boolean = false
 }
 
 class FakeConnectedDeviceInRecovery(
