@@ -5,7 +5,7 @@ name: Legacy watches
 
 on:
   push:
-    branches: ['dev/**', 'feature/**']
+    branches: [legacy, 'dev/**', 'feature/**']
   pull_request:
   workflow_dispatch:
 
