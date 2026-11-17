@@ -36,6 +36,7 @@ import coredevices.pebble.services.PluginSourceLoader
 import coredevices.pebble.services.Memfault
 import coredevices.pebble.battery.LocalBatteryRepository
 import coredevices.pebble.battery.LocalHeartbeatStore
+import coredevices.pebble.battery.WatchfaceImpactLookup
 import coredevices.pebble.services.AnalyticsHeartbeatQueue
 import coredevices.pebble.services.AnalyticsIngest
 import coredevices.pebble.services.ContactDeveloperApi
@@ -115,6 +116,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.json.Json
 import org.koin.core.module.Module
+import org.koin.core.parameter.parametersOf
 import org.koin.core.module.dsl.factoryOf
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.module.dsl.viewModel
@@ -234,6 +236,7 @@ val watchModule = module {
     singleOf(::AnalyticsHeartbeatQueue)
     singleOf(::LocalHeartbeatStore)
     singleOf(::LocalBatteryRepository)
+    single { WatchfaceImpactLookup(get()) { source -> get<AppstoreService> { parametersOf(source) } } }
     singleOf(::ContactDeveloperApi)
     factoryOf(::Cohorts)
     singleOf(::FirmwareUpdateCheck)
