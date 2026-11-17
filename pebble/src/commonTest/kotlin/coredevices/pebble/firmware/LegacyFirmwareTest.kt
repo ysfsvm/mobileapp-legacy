@@ -8,6 +8,10 @@ import io.rebble.libpebblecommon.metadata.WatchColor
 import io.rebble.libpebblecommon.metadata.WatchHardwarePlatform
 import io.rebble.libpebblecommon.services.FirmwareVersion
 import io.rebble.libpebblecommon.services.WatchInfo
+import com.russhwolf.settings.MapSettings
+import coredevices.util.CoreConfig
+import coredevices.util.CoreConfigFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,6 +19,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
@@ -35,6 +40,8 @@ class LegacyFirmwareTest {
             if (fail) throw Exception("offline")
             return releases
         }
+
+        override suspend fun download(url: String) = url.encodeToByteArray()
     }
 
     private class FakeClock(var now: Instant = Instant.fromEpochSeconds(1_800_000_000)) : Clock {
@@ -109,40 +116,93 @@ class LegacyFirmwareTest {
         assertNull(newestLegacyRelease(releases, "silk"))
     }
 
+    private fun updates(api: FakeApi, clock: FakeClock = FakeClock(), auto: Boolean = true, settings: MapSettings = MapSettings()) =
+        LegacyFirmwareUpdates(
+            api,
+            clock,
+            CoreConfigFlow(MutableStateFlow(CoreConfig(weatherSyncInterval = 6.hours, legacyUpdateAutoCheck = auto))),
+            settings,
+        )
+
     @Test
     fun offersOnlyANewerRelease() = runTest {
-        val updates = LegacyFirmwareUpdates(FakeApi(listOf(release("v4.47.0-legacy.2", "snowy_dvt"))), FakeClock())
-        val found = assertIs<FirmwareUpdateCheckResult.FoundUpdate>(updates.check(watch("v4.47.0-legacy.1")))
+        val updates = updates(FakeApi(listOf(release("v4.47.0-legacy.2", "snowy_dvt"))))
+        val found = assertIs<FirmwareUpdateCheckResult.FoundUpdate>(updates.check(watch("v4.47.0-legacy.1"), force = false))
         assertEquals("v4.47.0-legacy.2", found.version.stringVersion)
         assertEquals("https://example.invalid/snowy_dvt/v4.47.0-legacy.2.pbz", found.url)
-        assertEquals(FirmwareUpdateCheckResult.FoundNoUpdate, updates.check(watch("v4.47.0-legacy.2")))
-        assertEquals(FirmwareUpdateCheckResult.FoundNoUpdate, updates.check(watch("v4.47.0-legacy.2-3-gabc1234")))
-        assertIs<FirmwareUpdateCheckResult.FoundUpdate>(updates.check(watch("v4.47.0-30-g9ceecbba47")))
+        assertEquals(FirmwareUpdateCheckResult.FoundNoUpdate, updates.check(watch("v4.47.0-legacy.2"), force = false))
+        assertEquals(FirmwareUpdateCheckResult.FoundNoUpdate, updates.check(watch("v4.47.0-legacy.2-3-gabc1234"), force = false))
+        assertIs<FirmwareUpdateCheckResult.FoundUpdate>(updates.check(watch("v4.47.0-30-g9ceecbba47"), force = false))
     }
 
     @Test
     fun noUpdateForOtherWatchesOrWhenGithubFails() = runTest {
         val api = FakeApi(listOf(release("v4.47.0-legacy.2", "snowy_dvt")), fail = true)
-        val updates = LegacyFirmwareUpdates(api, FakeClock())
-        assertEquals(FirmwareUpdateCheckResult.FoundNoUpdate, updates.check(watch("v4.47.0-legacy.1")))
+        val updates = updates(api)
+        assertEquals(FirmwareUpdateCheckResult.FoundNoUpdate, updates.check(watch("v4.47.0-legacy.1"), force = false))
+        assertTrue(updates.lookup(WatchHardwarePlatform.PEBBLE_SNOWY_DVT, force = true).failed)
         api.fail = false
         assertEquals(
             FirmwareUpdateCheckResult.FoundNoUpdate,
-            updates.check(watch("v4.47.0-legacy.1", WatchHardwarePlatform.PEBBLE_SILK)),
+            updates.check(watch("v4.47.0-legacy.1", WatchHardwarePlatform.PEBBLE_SILK), force = false),
         )
     }
 
     @Test
-    fun listsReleasesAtMostEveryHalfHour() = runTest {
+    fun looksAtTheBackgroundRefreshInterval() = runTest {
         val api = FakeApi(listOf(release("v4.47.0-legacy.2", "snowy_dvt")))
         val clock = FakeClock()
-        val updates = LegacyFirmwareUpdates(api, clock)
-        updates.newest(WatchHardwarePlatform.PEBBLE_SNOWY_DVT)
-        clock.now += 29.minutes
-        updates.newest(WatchHardwarePlatform.PEBBLE_SNOWY_DVT)
+        val updates = updates(api, clock)
+        updates.lookup(WatchHardwarePlatform.PEBBLE_SNOWY_DVT)
+        clock.now += 5.hours
+        assertEquals("v4.47.0-legacy.2", updates.lookup(WatchHardwarePlatform.PEBBLE_SNOWY_DVT).newest?.tag)
+        assertEquals(1, api.calls)
+        clock.now += 2.hours
+        updates.lookup(WatchHardwarePlatform.PEBBLE_SNOWY_DVT)
+        assertEquals(2, api.calls)
+        assertEquals(clock.now, updates.lastChecked)
+    }
+
+    @Test
+    fun manualLooksOnlyWhenAskedAndNotTwiceInAMinute() = runTest {
+        val api = FakeApi(listOf(release("v4.47.0-legacy.2", "snowy_dvt")))
+        val clock = FakeClock()
+        val updates = updates(api, clock, auto = false)
+        val before = updates.lookup(WatchHardwarePlatform.PEBBLE_SNOWY_DVT)
+        assertNull(before.checkedAt)
+        assertNull(before.newest)
+        assertEquals(FirmwareUpdateCheckResult.FoundNoUpdate, updates.check(watch("v4.47.0-legacy.1"), force = false))
+        assertEquals(0, api.calls)
+        assertEquals("v4.47.0-legacy.2", updates.lookup(WatchHardwarePlatform.PEBBLE_SNOWY_DVT, force = true).newest?.tag)
+        clock.now += 30.minutes / 60
+        assertIs<FirmwareUpdateCheckResult.FoundUpdate>(updates.check(watch("v4.47.0-legacy.1"), force = true))
         assertEquals(1, api.calls)
         clock.now += 2.minutes
-        updates.newest(WatchHardwarePlatform.PEBBLE_SNOWY_DVT)
+        updates.lookup(WatchHardwarePlatform.PEBBLE_SNOWY_DVT, force = true)
         assertEquals(2, api.calls)
+    }
+
+    @Test
+    fun aRestartAnswersFromTheLastList() = runTest {
+        val settings = MapSettings()
+        val clock = FakeClock()
+        updates(FakeApi(listOf(release("v4.47.0-legacy.2", "snowy_dvt"))), clock, settings = settings)
+            .lookup(WatchHardwarePlatform.PEBBLE_SNOWY_DVT)
+        val api = FakeApi(emptyList())
+        clock.now += 1.hours
+        val check = updates(api, clock, settings = settings).lookup(WatchHardwarePlatform.PEBBLE_SNOWY_DVT)
+        assertEquals("v4.47.0-legacy.2", check.newest?.tag)
+        assertEquals(0, api.calls)
+    }
+
+    @Test
+    fun findsTheReleaseOfARunningTag() = runTest {
+        val api = FakeApi(listOf(release("v4.47.0-legacy.2", "snowy_dvt"), release("v4.47.0-legacy.1", "snowy_dvt")))
+        val updates = updates(api, auto = false)
+        val release = updates.release(WatchHardwarePlatform.PEBBLE_SNOWY_DVT, "v4.47.0-legacy.1")!!
+        assertEquals("https://example.invalid/snowy_dvt/v4.47.0-legacy.1.pbz", release.bundleUrl)
+        assertEquals(1, api.calls)
+        assertNull(updates.release(WatchHardwarePlatform.PEBBLE_SPALDING_PVT, "v4.47.0-legacy.1"))
+        assertEquals(release.bundleUrl, updates.download(release).decodeToString())
     }
 }

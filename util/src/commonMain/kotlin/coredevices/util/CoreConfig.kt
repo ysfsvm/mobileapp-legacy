@@ -123,6 +123,8 @@ data class CoreConfig(
     /** Set the day/night backlight switch times from the local sunrise/sunset during weather sync. */
     val backlightColorAutoSunriseSunset: Boolean = true,
     val autoFirmwareUpdate: Boolean = false,
+    /** Look for new builds of the legacy port on GitHub with the background refresh; off: only when asked. */
+    val legacyUpdateAutoCheck: Boolean = true,
     /** Null means updates are installed any time. */
     val autoFirmwareUpdateWindow: QuietTimeSchedule? = null,
 )

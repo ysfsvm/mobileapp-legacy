@@ -888,6 +888,20 @@ fun rememberSettingsItemsState(navBarNav: NavBarNav?, snackbarDisplay: SnackbarD
                         coreConfigHolder.update(coreConfig.copy(autoFirmwareUpdate = it))
                     },
                 ),
+                basicSettingsToggleItem(
+                    title = "Look for Port Builds Automatically",
+                    description = "Ask GitHub for new builds of the PebbleOS port for Pebble Time, Time Steel and " +
+                        "Time Round at the Background Refresh Interval. Off: only with Check for Updates in the " +
+                        "watch's menu.",
+                    topLevelType = TopLevelType.Phone,
+                    section = Section.General,
+                    group = SettingsGroup.AutomaticFirmwareUpdatess,
+                    keywords = "firmware pebbleos update port legacy github check",
+                    checked = coreConfig.legacyUpdateAutoCheck,
+                    onCheckChanged = {
+                        coreConfigHolder.update(coreConfig.copy(legacyUpdateAutoCheck = it))
+                    },
+                ),
                 SettingsItem(
                     title = "Time Window",
                     topLevelType = TopLevelType.Phone,

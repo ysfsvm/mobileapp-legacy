@@ -86,7 +86,7 @@ class FirmwareUpdateCheck(
                     }
             }
         }
-        val result = doCheck(watch)
+        val result = doCheck(watch, force)
         // Only cache definitive answers — transient failures (network, rate limit)
         // must retry on the next connect, not be locked in for the TTL.
         if (result !is FirmwareUpdateCheckResult.UpdateCheckFailed) {
@@ -97,13 +97,13 @@ class FirmwareUpdateCheck(
         return result
     }
 
-    private suspend fun doCheck(watch: WatchInfo): FirmwareUpdateCheckResult = when {
+    private suspend fun doCheck(watch: WatchInfo, force: Boolean): FirmwareUpdateCheckResult = when {
         watch.platform == UNKNOWN -> FirmwareUpdateCheckResult.UpdateCheckFailed("Unknown platform")
         watch.platform.isCoreDevice() -> engDashOta.getLatestFirmware(watch)
         // A legacy watch running a port of Core's PebbleOS: its builds are the port's GitHub
         // releases, which cohorts does not know. Its recovery firmware is Pebble's, so a watch in
         // recovery still gets Pebble's firmware back from cohorts.
-        watch.runningFwVersion.isCorePebbleOs() -> legacyFirmware.check(watch)
+        watch.runningFwVersion.isCorePebbleOs() -> legacyFirmware.check(watch, force)
         else -> cohorts.getLatestFirmware(watch)
     }
 

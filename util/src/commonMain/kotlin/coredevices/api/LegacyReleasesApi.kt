@@ -30,6 +30,9 @@ data class GithubReleaseAsset(
 interface LegacyReleasesApi {
     /** The port's most recent releases, newest first. */
     suspend fun releases(): List<GithubRelease>
+
+    /** The file behind one of a release's [GithubReleaseAsset.url]s. */
+    suspend fun download(url: String): ByteArray
 }
 
 class LegacyReleasesApiImpl : ApiClient(CommonBuildKonfig.USER_AGENT_VERSION), LegacyReleasesApi {
@@ -39,6 +42,12 @@ class LegacyReleasesApiImpl : ApiClient(CommonBuildKonfig.USER_AGENT_VERSION), L
             parameter("per_page", 20)
         }
         if (!resp.status.isSuccess()) throw Exception("Failed to list the port's releases: ${resp.status}")
+        return resp.body()
+    }
+
+    override suspend fun download(url: String): ByteArray {
+        val resp = client.get(Url(url))
+        if (!resp.status.isSuccess()) throw Exception("Failed to download $url: ${resp.status}")
         return resp.body()
     }
 

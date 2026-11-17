@@ -1,8 +1,10 @@
 package coredevices.pebble.firmware
 
 import co.touchlab.kermit.Logger
+import com.russhwolf.settings.Settings
 import coredevices.api.GithubRelease
 import coredevices.api.LegacyReleasesApi
+import coredevices.util.CoreConfigFlow
 import io.rebble.libpebblecommon.connection.FirmwareUpdateCheckResult
 import io.rebble.libpebblecommon.metadata.WatchHardwarePlatform
 import io.rebble.libpebblecommon.services.FirmwareVersion
@@ -10,6 +12,7 @@ import io.rebble.libpebblecommon.services.WatchInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -84,38 +87,77 @@ fun newestLegacyRelease(releases: List<GithubRelease>, board: String): LegacyRel
         }
         .maxByOrNull { it.version }
 
-/** Finds the port's releases on GitHub, at most once every half hour. */
+/** What the last look at the port's releases found for one board. */
+data class LegacyCheck(val newest: LegacyRelease?, val checkedAt: Instant?, val failed: Boolean)
+
+/**
+ * Looks up the port's releases on GitHub at the app's background refresh interval, or only when
+ * asked if the user turned that off. The last list is kept across restarts, so a check that is not
+ * due answers from it.
+ */
 class LegacyFirmwareUpdates(
     private val api: LegacyReleasesApi,
     private val clock: Clock,
+    private val coreConfig: CoreConfigFlow,
+    private val settings: Settings,
 ) {
     private val logger = Logger.withTag("LegacyFirmwareUpdates")
     private val mutex = Mutex()
-    private var cached: Pair<Instant, List<GithubRelease>>? = null
+    private val json = Json { ignoreUnknownKeys = true }
 
-    private suspend fun releases(): List<GithubRelease> = mutex.withLock {
-        cached?.takeIf { clock.now() - it.first < CACHE_TTL }?.second
-            ?: api.releases().also { cached = clock.now() to it }
+    val lastChecked: Instant?
+        get() = settings.getLongOrNull(KEY_CHECKED_AT)?.let { Instant.fromEpochMilliseconds(it) }
+
+    private fun stored(): List<GithubRelease>? = settings.getStringOrNull(KEY_RELEASES)?.let {
+        runCatching { json.decodeFromString<List<GithubRelease>>(it) }.getOrNull()
     }
 
-    /** The newest release for the watch's board; null when there is none or GitHub can't be reached. */
-    suspend fun newest(platform: WatchHardwarePlatform): LegacyRelease? {
-        val board = platform.legacyBundleBoard() ?: return null
+    /** The releases, fetched when [force]d or due, else as last fetched; null before any fetch. */
+    private suspend fun releases(force: Boolean): List<GithubRelease>? = mutex.withLock {
+        val now = clock.now()
+        val last = lastChecked
+        val config = coreConfig.value
+        val interval = config.weatherSyncInterval.takeIf { config.legacyUpdateAutoCheck }
+        val fresh = last != null && now - last < MIN_INTERVAL
+        val due = !fresh && (force || (interval != null && (last == null || now - last >= interval)))
+        if (!due) return stored()
+        val releases = api.releases()
+        settings.putLong(KEY_CHECKED_AT, now.toEpochMilliseconds())
+        settings.putString(KEY_RELEASES, json.encodeToString(releases))
+        releases
+    }
+
+    /** The newest release for [platform]'s board; looks on GitHub only when [force]d or due. */
+    suspend fun lookup(platform: WatchHardwarePlatform, force: Boolean = false): LegacyCheck {
+        val board = platform.legacyBundleBoard() ?: return LegacyCheck(null, lastChecked, failed = false)
         return try {
-            newestLegacyRelease(releases(), board)
+            val releases = releases(force)
+            LegacyCheck(releases?.let { newestLegacyRelease(it, board) }, lastChecked, failed = false)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             logger.w(e) { "Couldn't list the port's releases: ${e.message}" }
-            null
+            LegacyCheck(stored()?.let { newestLegacyRelease(it, board) }, lastChecked, failed = true)
         }
     }
 
+    /** The release [tag] with its bundle for [platform]'s board; looks on GitHub if the last list lacks it. */
+    suspend fun release(platform: WatchHardwarePlatform, tag: String): LegacyRelease? {
+        val board = platform.legacyBundleBoard() ?: return null
+        fun find(releases: List<GithubRelease>?) = releases?.let { list ->
+            newestLegacyRelease(list.filter { it.tag == tag }, board)
+        }
+        return find(stored()) ?: find(releases(force = true))
+    }
+
+    /** The bundle of [release], downloaded from GitHub. */
+    suspend fun download(release: LegacyRelease): ByteArray = api.download(release.bundleUrl)
+
     /** An update when a release for the watch's board is newer than what it runs. */
-    suspend fun check(watch: WatchInfo): FirmwareUpdateCheckResult {
+    suspend fun check(watch: WatchInfo, force: Boolean): FirmwareUpdateCheckResult {
         val running = LegacyVersion.parse(watch.runningFwVersion.stringVersion)
             ?: return FirmwareUpdateCheckResult.FoundNoUpdate
-        val newest = newest(watch.platform)?.takeIf { it.version > running }
+        val newest = lookup(watch.platform, force).newest?.takeIf { it.version > running }
             ?: return FirmwareUpdateCheckResult.FoundNoUpdate
         val version = FirmwareVersion.from(
             tag = newest.tag,
@@ -136,6 +178,9 @@ class LegacyFirmwareUpdates(
     }
 
     companion object {
-        private val CACHE_TTL = 30.minutes
+        /** A forced check right after another one answers from it: the card and the update check both ask. */
+        private val MIN_INTERVAL = 1.minutes
+        private const val KEY_CHECKED_AT = "legacy_releases_checked_at"
+        private const val KEY_RELEASES = "legacy_releases"
     }
 }
