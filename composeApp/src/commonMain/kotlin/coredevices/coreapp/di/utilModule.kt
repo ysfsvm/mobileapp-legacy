@@ -10,6 +10,8 @@ import coredevices.analytics.HeartbeatMetricsSource
 import coredevices.analytics.RealCoreAnalytics
 import coredevices.api.EngDashOtaApi
 import coredevices.api.EngDashOtaApiImpl
+import coredevices.api.LegacyReleasesApi
+import coredevices.api.LegacyReleasesApiImpl
 import coredevices.api.WisprFlowAuth
 import coredevices.coreapp.CommonAppDelegate
 import coredevices.coreapp.plugins.AppstorePluginStore
@@ -135,4 +137,5 @@ val utilModule = module {
     singleOf(::HealthSyncTracker)
     single { PlatformHealthSync(get(), get(), get(), lazy { get() }, get()) }
     single { EngDashOtaApiImpl() } bind EngDashOtaApi::class
+    single { LegacyReleasesApiImpl() } bind LegacyReleasesApi::class
 }

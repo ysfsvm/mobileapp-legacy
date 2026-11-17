@@ -46,6 +46,7 @@ class FirmwareUpdateCheck(
     private val cohorts: Cohorts,
     private val coreConfig: CoreConfigFlow,
     private val coreAnalytics: CoreAnalytics,
+    private val legacyFirmware: LegacyFirmwareUpdates,
     private val clock: Clock = Clock.System,
 ) {
     private val logger = Logger.withTag("FirmwareUpdateCheck")
@@ -99,10 +100,10 @@ class FirmwareUpdateCheck(
     private suspend fun doCheck(watch: WatchInfo): FirmwareUpdateCheckResult = when {
         watch.platform == UNKNOWN -> FirmwareUpdateCheckResult.UpdateCheckFailed("Unknown platform")
         watch.platform.isCoreDevice() -> engDashOta.getLatestFirmware(watch)
-        // A legacy watch running a community port of Core's PebbleOS: its builds are published
-        // neither here nor in cohorts, which only knows Pebble's own firmware. Its recovery
-        // firmware is Pebble's, so a watch in recovery still gets Pebble's firmware back.
-        watch.runningFwVersion.isCorePebbleOs() -> FirmwareUpdateCheckResult.FoundNoUpdate
+        // A legacy watch running a port of Core's PebbleOS: its builds are the port's GitHub
+        // releases, which cohorts does not know. Its recovery firmware is Pebble's, so a watch in
+        // recovery still gets Pebble's firmware back from cohorts.
+        watch.runningFwVersion.isCorePebbleOs() -> legacyFirmware.check(watch)
         else -> cohorts.getLatestFirmware(watch)
     }
 
