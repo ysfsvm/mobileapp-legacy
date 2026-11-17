@@ -2117,6 +2117,7 @@ fun WatchDetails(
         }
     }
     Spacer(modifier = Modifier.height(5.dp))
+    LegacyPortInfo(watch)
     val firmwareUpdateAvailable =
         (watch as? ConnectedPebble.Firmware)?.firmwareUpdateAvailable?.result
     val firmwareUpdater = watch as? ConnectedPebble.Firmware
