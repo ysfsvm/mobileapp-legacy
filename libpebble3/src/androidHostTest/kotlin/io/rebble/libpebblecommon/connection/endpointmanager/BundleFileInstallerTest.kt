@@ -115,8 +115,8 @@ class BundleFileInstallerTest {
     }
 
     /** A connection to a watch running [versionTag]; returns once it has nothing left to do. */
-    private fun TestScope.connect(watch: FakePutBytesWatch, versionTag: String = VERSION) {
-        installer(watch).init(
+    private fun TestScope.connect(watch: FakePutBytesWatch, versionTag: String = VERSION): BundleFileInstaller =
+        installer(watch).also { it.init(
             FirmwareVersion.from(
                 tag = versionTag,
                 isRecovery = false,
@@ -125,9 +125,7 @@ class BundleFileInstallerTest {
                 isDualSlot = false,
                 isSlot0 = false,
             )!!
-        )
-        testScheduler.runCurrent()
-    }
+        ) }.also { testScheduler.runCurrent() }
 
     private fun updatedFrom(bundle: Path) = pending.record(identifier, PbzFirmware(bundle).manifests.single())
 
@@ -232,13 +230,14 @@ class BundleFileInstallerTest {
         val errors = reportedErrors()
         updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
         val watch = FakePutBytesWatch()
-        connect(watch)
+        val installer = connect(watch)
 
         watch.assertFilesSent("emoji" to pack)
         assertNull(pending.get(identifier))
+        assertEquals(BundleFilesState.Installed(listOf("emoji")), installer.bundleFilesState.value)
 
         val nextConnection = FakePutBytesWatch()
-        connect(nextConnection)
+        assertEquals(BundleFilesState.Idle, connect(nextConnection).bundleFilesState.value)
         assertEquals(emptyList(), nextConnection.packets)
         assertEquals(emptyList(), errors)
     }
@@ -255,7 +254,7 @@ class BundleFileInstallerTest {
     fun otherFirmwareDropsTheFiles() = runTest {
         updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
         val watch = FakePutBytesWatch()
-        connect(watch, "v4.46.0")
+        assertEquals(BundleFilesState.Idle, connect(watch, "v4.46.0").bundleFilesState.value)
 
         assertEquals(emptyList(), watch.packets)
         assertNull(pending.get(identifier))
@@ -272,13 +271,17 @@ class BundleFileInstallerTest {
     fun failedTransferIsRetriedOnTheNextConnection() = runTest {
         val errors = reportedErrors()
         updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
-        connect(FakePutBytesWatch(nack = { it is PutBytesInit }))
+        val first = connect(FakePutBytesWatch(nack = { it is PutBytesInit }))
 
         assertEquals(1, pending.get(identifier)?.attempts)
         assertEquals(emptyList(), errors)
+        assertEquals(
+            BundleFilesState.WillRetry(listOf("emoji"), 1, BundleFileInstaller.MAX_ATTEMPTS),
+            first.bundleFilesState.value,
+        )
 
         val watch = FakePutBytesWatch()
-        connect(watch)
+        assertEquals(BundleFilesState.Installed(listOf("emoji")), connect(watch).bundleFilesState.value)
         watch.assertFilesSent("emoji" to pack)
         assertNull(pending.get(identifier))
     }
@@ -287,12 +290,14 @@ class BundleFileInstallerTest {
     fun givesUpAndReportsAfterRepeatedFailures() = runTest {
         val errors = reportedErrors()
         updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
+        var last: BundleFileInstaller? = null
         repeat(BundleFileInstaller.MAX_ATTEMPTS) {
             assertEquals(emptyList(), errors)
-            connect(FakePutBytesWatch(nack = { it is PutBytesInit }))
+            last = connect(FakePutBytesWatch(nack = { it is PutBytesInit }))
         }
 
         assertIs<UserFacingError.FailedToInstallBundleFiles>(errors.single())
+        assertEquals(listOf("emoji"), assertIs<BundleFilesState.Failed>(last!!.bundleFilesState.value).targets)
         assertNull(pending.get(identifier))
     }
 
@@ -302,9 +307,10 @@ class BundleFileInstallerTest {
         updatedFrom(writeTestPbz(VERSION, listOf(emoji)))
         repeat(BundleFileInstaller.MAX_ATTEMPTS) { pending.startAttempt(identifier) }
         val watch = FakePutBytesWatch()
-        connect(watch)
+        val installer = connect(watch)
 
         assertEquals(emptyList(), watch.packets)
+        assertEquals(emptyList(), assertIs<BundleFilesState.Failed>(installer.bundleFilesState.value).targets)
         assertIs<UserFacingError.FailedToInstallBundleFiles>(errors.single())
         assertNull(pending.get(identifier))
     }

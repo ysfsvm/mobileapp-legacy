@@ -11,6 +11,7 @@ import io.rebble.libpebblecommon.calls.Call
 import io.rebble.libpebblecommon.connection.bt.BluetoothState
 import io.rebble.libpebblecommon.connection.bt.ble.pebble.ReversePpogVersion
 import io.rebble.libpebblecommon.connection.endpointmanager.BundleFileResult
+import io.rebble.libpebblecommon.connection.endpointmanager.BundleFilesState
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdateTrigger
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdater
 import io.rebble.libpebblecommon.connection.endpointmanager.InstalledLanguagePack
@@ -864,6 +865,8 @@ class FakeConnectedDevice(
     override val installedLanguagePack: InstalledLanguagePack? = null
 
     override suspend fun requestHealthData(fullSync: Boolean): Boolean = true
+
+    override val bundleFilesState: StateFlow<BundleFilesState> = MutableStateFlow(BundleFilesState.Idle)
 
     override suspend fun installBundleFiles(bundle: Path, onProgress: (Float) -> Unit): List<BundleFileResult> =
         emptyList()

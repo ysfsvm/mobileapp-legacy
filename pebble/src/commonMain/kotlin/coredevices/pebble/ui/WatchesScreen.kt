@@ -1,5 +1,6 @@
 package coredevices.pebble.ui
 
+import io.rebble.libpebblecommon.connection.endpointmanager.BundleFilesState
 import CommonRoutes
 import NextBugReportContext
 import PlatformShareLauncher
@@ -1209,11 +1210,31 @@ fun FirmwareUpdateErrorStarting.message(): String = when (this) {
     FirmwareUpdateErrorStarting.ErrorParsingPbz -> "Failed to parse manifest"
 }
 
+// The emoji pack is the one file firmware bundles carry today; name it so people know what it is.
+private fun bundleFilesName(targets: List<String>) =
+    if (targets.isNotEmpty() && targets.all { it == "emoji" }) "emoji pack" else "watch files"
+
+@Composable
+private fun bundleFilesText(state: BundleFilesState): String = when (state) {
+    is BundleFilesState.Idle -> ""
+    is BundleFilesState.Installing -> {
+        val progress by state.progress.collectAsState()
+        " - Installing ${bundleFilesName(state.targets)} (${(progress * 100).toInt()}%)"
+    }
+    is BundleFilesState.Installed -> " - ${bundleFilesName(state.targets).replaceFirstChar { it.uppercase() }} installed"
+    is BundleFilesState.WillRetry ->
+        " - ${bundleFilesName(state.targets).replaceFirstChar { it.uppercase() }} not installed; " +
+            "trying again on the next connection (${state.attempt} of ${state.maxAttempts})"
+    is BundleFilesState.Failed ->
+        " - ${bundleFilesName(state.targets).replaceFirstChar { it.uppercase() }} not installed: ${state.reason}"
+}
+
 @Composable
 fun PebbleDevice.stateText(
     firmwareUpdateState: FirmwareUpdater.FirmwareUpdateStatus,
     languagePackInstallState: LanguagePackInstallState,
     coreConfig: CoreConfig,
+    bundleFilesState: BundleFilesState = BundleFilesState.Idle,
 ): String {
     val installingState = when (firmwareUpdateState) {
         is FirmwareUpdater.FirmwareUpdateStatus.InProgress -> {
@@ -1224,7 +1245,7 @@ fun PebbleDevice.stateText(
         is FirmwareUpdater.FirmwareUpdateStatus.NotInProgress.ErrorStarting -> " - Error starting update: ${firmwareUpdateState.error.message()}"
         is FirmwareUpdater.FirmwareUpdateStatus.NotInProgress.Idle -> when (languagePackInstallState) {
             is LanguagePackInstallState.Installing -> " - installing language pack: ${languagePackInstallState.language}"
-            is LanguagePackInstallState.Idle -> ""
+            is LanguagePackInstallState.Idle -> bundleFilesText(bundleFilesState)
             is LanguagePackInstallState.Downloading -> " - downloading language pack: ${languagePackInstallState.language}"
         }
         is FirmwareUpdater.FirmwareUpdateStatus.WaitingForReboot -> if (firmwareUpdateState.viaPrf) {
@@ -2013,9 +2034,13 @@ fun WatchDetails(
     val firmwareUpdateInProgress =
         firmwareUpdateState !is FirmwareUpdater.FirmwareUpdateStatus.NotInProgress
     val languagePackInstallState = (watch as? ConnectedPebble.LanguageState)?.languagePackInstallState ?: LanguagePackInstallState.Idle()
+    val bundleFilesFlow = remember(watch) {
+        (watch as? ConnectedPebble.BundleFiles)?.bundleFilesState ?: MutableStateFlow(BundleFilesState.Idle)
+    }
+    val bundleFilesState by bundleFilesFlow.collectAsState()
     Row {
         Text(
-            text = watch.stateText(firmwareUpdateState, languagePackInstallState, coreConfig),
+            text = watch.stateText(firmwareUpdateState, languagePackInstallState, coreConfig, bundleFilesState),
             fontWeight = when {
                 watch.isActive() -> FontWeight.Bold
                 else -> FontWeight.Normal
@@ -2034,6 +2059,12 @@ fun WatchDetails(
         }
     } else if (languagePackInstallState is LanguagePackInstallState.Installing) {
         val progress by languagePackInstallState.progress.collectAsState()
+        CoreLinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        )
+    } else if (bundleFilesState is BundleFilesState.Installing) {
+        val progress by (bundleFilesState as BundleFilesState.Installing).progress.collectAsState()
         CoreLinearProgressIndicator(
             progress = { progress },
             modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),

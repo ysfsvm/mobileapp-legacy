@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import io.rebble.libpebblecommon.connection.bt.ble.pebble.PebbleLeScanRecord
 import io.rebble.libpebblecommon.connection.bt.ble.pebble.ReversePpogVersion
 import io.rebble.libpebblecommon.connection.endpointmanager.BundleFileResult
+import io.rebble.libpebblecommon.connection.endpointmanager.BundleFilesState
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdateTrigger
 import io.rebble.libpebblecommon.connection.endpointmanager.FirmwareUpdater
 import io.rebble.libpebblecommon.connection.endpointmanager.InstalledLanguagePack
@@ -246,6 +247,9 @@ object ConnectedPebble {
     }
 
     interface BundleFiles {
+        /** The install of the last firmware update's files on this connection. */
+        val bundleFilesState: StateFlow<BundleFilesState>
+
         /** Installs the files a firmware bundle carries for the watch's filesystem, if any. */
         suspend fun installBundleFiles(bundle: Path, onProgress: (Float) -> Unit = {}): List<BundleFileResult>
 

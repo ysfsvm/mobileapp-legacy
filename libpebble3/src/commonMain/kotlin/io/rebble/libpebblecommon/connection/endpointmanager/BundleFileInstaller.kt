@@ -18,6 +18,9 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.io.Source
 import kotlinx.io.buffered
@@ -34,6 +37,23 @@ enum class BundleFileOutcome {
 
 data class BundleFileResult(val target: String, val outcome: BundleFileOutcome)
 
+/** What the install of a firmware update's files is doing on this connection. */
+sealed interface BundleFilesState {
+    data object Idle : BundleFilesState
+
+    /** Sending [targets]; [attempt] counts the connections that tried, this one included. */
+    data class Installing(val targets: List<String>, val attempt: Int, val progress: StateFlow<Float>) :
+        BundleFilesState
+
+    data class Installed(val targets: List<String>) : BundleFilesState
+
+    /** Not all of [targets] went over; the next connection tries again. */
+    data class WillRetry(val targets: List<String>, val attempt: Int, val maxAttempts: Int) : BundleFilesState
+
+    /** Given up on [targets] (empty when the bundle could not be read). */
+    data class Failed(val targets: List<String>, val reason: String) : BundleFilesState
+}
+
 /** Puts files on the watch's filesystem: the ones a firmware bundle carries, or a single one. */
 class BundleFileInstaller(
     private val identifier: PebbleIdentifier,
@@ -43,6 +63,8 @@ class BundleFileInstaller(
     private val errorTracker: ErrorTracker,
 ) : ConnectedPebble.BundleFiles {
     private val logger = Logger.withTag("BundleFileInstaller-$identifier")
+    private val _state = MutableStateFlow<BundleFilesState>(BundleFilesState.Idle)
+    override val bundleFilesState: StateFlow<BundleFilesState> = _state.asStateFlow()
 
     /** Installs the files of the bundle the watch was last updated from, if it now runs that firmware. */
     fun init(runningFwVersion: FirmwareVersion) {
@@ -77,16 +99,28 @@ class BundleFileInstaller(
             return
         }
         logger.i { "Installing the files of ${pending.versionTag} (attempt ${pending.attempts})" }
-        val results = install(manifest)
+        val targets = manifest.manifest.files.map { it.target }
+        val progress = MutableStateFlow(0f)
+        _state.value = BundleFilesState.Installing(targets, pending.attempts, progress.asStateFlow())
+        val results = install(manifest) { progress.value = it }
         when {
-            results.none { it.outcome == BundleFileOutcome.Failed } -> pendingBundleFiles.clear(identifier)
-            pending.attempts >= MAX_ATTEMPTS -> giveUp("the transfer failed $MAX_ATTEMPTS times")
-            else -> logger.w { "Files of ${pending.versionTag} not installed; trying again on the next connection" }
+            results.none { it.outcome == BundleFileOutcome.Failed } -> {
+                pendingBundleFiles.clear(identifier)
+                _state.value = BundleFilesState.Installed(
+                    results.filter { it.outcome == BundleFileOutcome.Installed }.map { it.target }
+                )
+            }
+            pending.attempts >= MAX_ATTEMPTS -> giveUp("the transfer failed $MAX_ATTEMPTS times", targets)
+            else -> {
+                logger.w { "Files of ${pending.versionTag} not installed; trying again on the next connection" }
+                _state.value = BundleFilesState.WillRetry(targets, pending.attempts, MAX_ATTEMPTS)
+            }
         }
     }
 
-    private fun giveUp(reason: String) {
+    private fun giveUp(reason: String, targets: List<String> = emptyList()) {
         logger.e { "Giving up on the files of the firmware update: $reason" }
+        _state.value = BundleFilesState.Failed(targets, reason)
         pendingBundleFiles.clear(identifier)
         errorTracker.reportError(
             UserFacingError.FailedToInstallBundleFiles(
