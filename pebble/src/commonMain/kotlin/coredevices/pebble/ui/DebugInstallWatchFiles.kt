@@ -1,5 +1,24 @@
 package coredevices.pebble.ui
 
+import androidx.compose.runtime.collectAsState
+import coreapp.pebble.generated.resources.debug_emoji_download_failed
+import coreapp.pebble.generated.resources.debug_emoji_downloading
+import coreapp.pebble.generated.resources.debug_emoji_failed
+import coreapp.pebble.generated.resources.debug_emoji_from_github
+import coreapp.pebble.generated.resources.debug_emoji_installed
+import coreapp.pebble.generated.resources.debug_emoji_installing
+import coreapp.pebble.generated.resources.debug_emoji_last
+import coreapp.pebble.generated.resources.debug_emoji_no_release
+import coreapp.pebble.generated.resources.debug_emoji_none
+import coreapp.pebble.generated.resources.debug_emoji_retry
+import coreapp.pebble.generated.resources.debug_emoji_title
+import coredevices.pebble.firmware.LegacyFirmwareUpdates
+import coredevices.pebble.firmware.LegacyVersion
+import coredevices.pebble.firmware.legacyBundleBoard
+import io.rebble.libpebblecommon.connection.KnownPebbleDevice
+import io.rebble.libpebblecommon.connection.endpointmanager.BundleFilesState
+import kotlinx.coroutines.CancellationException
+import kotlinx.io.buffered
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +63,7 @@ private sealed interface WatchFilesUiState {
     data object Idle : WatchFilesUiState
     data class AskName(val file: Path, val suggested: String) : WatchFilesUiState
     data class Installing(val progress: Float) : WatchFilesUiState
+    data class Downloading(val tag: String) : WatchFilesUiState
     data class Done(val message: String) : WatchFilesUiState
 }
 
@@ -64,12 +84,13 @@ internal fun suggestedWatchFileName(fileName: String): String =
     if (fileName.endsWith(RESOURCE_PACK_EXTENSION)) EMOJI_PACK_TARGET else fileName
 
 /**
- * Puts the files of a picked firmware bundle on the watch's filesystem, or any other picked file
- * under a name that is asked for.
+ * Puts the files of a firmware bundle on the watch's filesystem: the bundle of the running release
+ * from GitHub, or a picked bundle. Any other picked file goes under a name that is asked for.
  */
 @Composable
 fun DebugInstallWatchFiles(watch: PebbleDevice?) {
     val appContext = koinInject<AppContext>()
+    val legacyFirmware = koinInject<LegacyFirmwareUpdates>()
     val scope = rememberCoroutineScope()
     val currentWatch by rememberUpdatedState(watch)
     var state by remember { mutableStateOf<WatchFilesUiState>(WatchFilesUiState.Idle) }
@@ -114,7 +135,57 @@ fun DebugInstallWatchFiles(watch: PebbleDevice?) {
         }
     }
 
+    Text(stringResource(Res.string.debug_emoji_title), style = MaterialTheme.typography.titleMedium)
+    val autoState = (watch as? ConnectedPebble.BundleFiles)?.bundleFilesState?.collectAsState()?.value
+    Text(
+        when (autoState) {
+            null, is BundleFilesState.Idle -> stringResource(Res.string.debug_emoji_none)
+            else -> stringResource(Res.string.debug_emoji_last, autoBundleText(autoState))
+        },
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    // A watch running a tagged release of the port can get that release's emoji pack again.
+    val known = watch as? KnownPebbleDevice
+    val releaseTag = known?.runningFwVersion?.takeIf { tag ->
+        LegacyVersion.parse(tag)?.let { it.legacy > 0 && it.commits == 0 } == true &&
+            known.watchType.legacyBundleBoard() != null
+    }
+    if (releaseTag != null && state !is WatchFilesUiState.Installing && state !is WatchFilesUiState.Downloading) {
+        Button(onClick = {
+            state = WatchFilesUiState.Downloading(releaseTag)
+            scope.launch {
+                val bundle = try {
+                    val release = legacyFirmware.release(known.watchType, releaseTag)
+                    if (release == null) {
+                        state = WatchFilesUiState.Done(getString(Res.string.debug_emoji_no_release, releaseTag))
+                        return@launch
+                    }
+                    legacyFirmware.download(release)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    state = WatchFilesUiState.Done(getString(Res.string.debug_emoji_download_failed, e.message ?: "error"))
+                    return@launch
+                }
+                val path = Path(getTempFwPath(appContext).parent!!, "temp-release-bundle.pbz")
+                SystemFileSystem.sink(path).buffered().use { it.write(bundle) }
+                install { installBundleFiles(path, onProgress) }
+            }
+        }) {
+            Text(stringResource(Res.string.debug_emoji_from_github, releaseTag))
+        }
+    }
+
     when (val current = state) {
+        is WatchFilesUiState.Downloading -> {
+            Text(
+                stringResource(Res.string.debug_emoji_downloading, current.tag),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            CoreLinearProgressIndicator()
+        }
+
         is WatchFilesUiState.Installing -> {
             Text(
                 stringResource(Res.string.debug_watch_files_installing, (current.progress * 100).roundToInt()),
@@ -156,4 +227,16 @@ fun DebugInstallWatchFiles(watch: PebbleDevice?) {
             },
         )
     }
+}
+
+@Composable
+private fun autoBundleText(state: BundleFilesState): String = when (state) {
+    is BundleFilesState.Idle -> stringResource(Res.string.debug_emoji_none)
+    is BundleFilesState.Installing -> {
+        val progress by state.progress.collectAsState()
+        stringResource(Res.string.debug_emoji_installing, (progress * 100).roundToInt())
+    }
+    is BundleFilesState.Installed -> stringResource(Res.string.debug_emoji_installed)
+    is BundleFilesState.WillRetry -> stringResource(Res.string.debug_emoji_retry, state.attempt, state.maxAttempts)
+    is BundleFilesState.Failed -> stringResource(Res.string.debug_emoji_failed, state.reason)
 }
